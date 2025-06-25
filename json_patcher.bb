@@ -292,7 +292,6 @@ Environment Variables:
 
 (defn -main [& args]
   (let [options (smith/config usage)]
-    (prn options)
     (cond
       (:help options)
       (println usage)
