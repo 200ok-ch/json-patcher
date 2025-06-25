@@ -6,7 +6,7 @@ The chief cook and bottle washer of json patching
 
 * Overview
 
-**json-patcher** is a tool that processes JSON file versions and
+*json-patcher* is a tool that processes JSON file versions and
 generates patches, fixes, and changelogs. This project helps
 manage and track changes between different versions of JSON files.
 
