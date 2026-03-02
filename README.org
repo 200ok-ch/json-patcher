@@ -6,15 +6,17 @@ The chief cook and bottle washer of json patching
 
 * Overview
 
-*json-patcher* is a tool that processes JSON file versions and
+*json-patcher* is a tool that processes JSON files and
 generates patches, fixes, and changelogs. This project helps
-manage and track changes between different versions of JSON files.
+manage and track changes between different JSON files.
 
 * Features
 
-- Generate patches between JSON versions
-- Create fixes for JSON files
-- Generate changelogs from JSON modifications
+- Generate patches between JSON files
+- Generate human-readable descriptions from patch files
+- Apply patch files to JSON files
+- Append generated descriptions to a changelog
+- Emit JSON output for automation with =--json=
 
 * Installation
 
@@ -24,10 +26,13 @@ bbin install io.github.200ok-ch/json-patcher
 
 * Usage
 
-Example
+Examples
 
 #+BEGIN_SRC bash
-json-patcher process v1 v2 --verbose
+json-patcher diff old.json new.json --out changes.patch
+json-patcher describe changes.patch --append-changelog CHANGELOG.md
+json-patcher apply old.json fix.patch --out old-fix.json
+json-patcher diff old.json new.json --json
 #+END_SRC
 
 * Requirements
@@ -35,3 +40,4 @@ json-patcher process v1 v2 --verbose
 - Babashka
 - jsondiff/jsonpatch
 - OpenAI API Key (optional)
+./json_patcher.bb diff li-20260302T092642Z-v1.json li-20260302T092703Z-v2.json --out patch-v1-v2.json --json
