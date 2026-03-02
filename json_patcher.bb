@@ -8,21 +8,21 @@
             [babashka.process :as p]
             [shell-smith.core :as smith]))
 
-(def version "0.3.0")
+(def version "0.2.0")
 
 (def usage "json-patcher - The chief cook and bottle washer of json patching
 
 Usage:
   json-patcher diff <from-file> <to-file> [--out <patch-file>] [--json] [--dry-run] [--verbose]
-  json-patcher describe <patch-file> [--out <md-file> | --append-changelog <changelog-file>] [--llm-endpoint <url>] [--llm-api-key <key>] [--llm-model <model>] [--json] [--dry-run] [--verbose]
+  json-patcher describe <patch-file> [--out <md-file> | --append <changelog-file>] [--llm-endpoint <url>] [--llm-api-key <key>] [--llm-model <model>] [--json] [--dry-run] [--verbose]
   json-patcher apply <base-file> <patch-file> [--out <fixed-file>] [--json] [--dry-run] [--verbose]
   json-patcher --help
   json-patcher --version
 
 Options:
   --out <file>                         Write output to file
-  --append-changelog <changelog-file>  Append description to changelog file
-  --llm-endpoint <url>                 LLM API endpoint for human-readable text
+  --append <changelog-file>  Append description to changelog file
+  --llm-endpoint <url>                 OpenAI-compatible Chat Completions endpoint
   --llm-api-key <key>                  API key for LLM service
   --llm-model <model>                  Model for LLM service [default: gpt-4.1]
   --dry-run                            Show what would be done without executing
@@ -32,7 +32,7 @@ Options:
   --version                            Show version information
 
 Environment Variables:
-  JSON_PATCHER_LLM_ENDPOINT    Default LLM API endpoint
+  JSON_PATCHER_LLM_ENDPOINT    Default OpenAI-compatible Chat Completions endpoint
   JSON_PATCHER_LLM_API_KEY     Default LLM API key
   JSON_PATCHER_LLM_MODEL       Default LLM model")
 
@@ -46,8 +46,11 @@ Environment Variables:
 (defn output-json [data]
   (println (json/write-str data)))
 
-(defn now-iso []
-  (str (java.time.Instant/now)))
+(defn now-human-utc []
+  (let [formatter (java.time.format.DateTimeFormatter/ofPattern
+                   "dd MMM uuuu, HH:mm 'UTC'"
+                   java.util.Locale/ENGLISH)]
+    (.format (java.time.ZonedDateTime/now java.time.ZoneOffset/UTC) formatter)))
 
 (defn ensure-file-exists [path label]
   (let [f (io/file path)]
@@ -118,11 +121,13 @@ Environment Variables:
       (describe-with-llm options patch-content))
     (local-description patch-content)))
 
-(defn append-changelog [changelog-file text dry-run verbose]
+(defn append [changelog-file source-file text dry-run verbose]
   (let [existing-content (if (.exists (io/file changelog-file))
                            (slurp changelog-file)
                            "# Changelog\n")
-        entry (str "\n## " (now-iso) "\n\n" text "\n")
+        entry (str "\n## " (now-human-utc) "\n\n"
+                   "Source: `" source-file "`\n\n"
+                   text "\n")
         new-content (str (str/trimr existing-content) "\n" entry)]
     (if dry-run
       (log verbose "[DRY-RUN] Would append to changelog:" changelog-file)
@@ -154,15 +159,15 @@ Environment Variables:
 
 (defn handle-describe [options]
   (let [{:keys [patch-file out json dry-run verbose]} options
-        append-changelog-file (:append-changelog options)
+        append-file (:append options)
         _ (ensure-file-exists patch-file "Patch file")
-        _ (when (and out append-changelog-file)
-            (throw (ex-info "--out and --append-changelog are mutually exclusive"
-                            {:out out :append-changelog append-changelog-file})))
+        _ (when (and out append-file)
+            (throw (ex-info "--out and --append are mutually exclusive"
+                            {:out out :append append-file})))
         patch-content (slurp patch-file)
         description (render-description options patch-content)]
     (cond
-      append-changelog-file (append-changelog append-changelog-file description dry-run verbose)
+      append-file (append append-file patch-file description dry-run verbose)
       out (when-not dry-run
             (spit out description)
             (log verbose "Wrote description:" out))
@@ -173,7 +178,7 @@ Environment Variables:
                     :command "describe"
                     :patch-file patch-file
                     :output-file out
-                    :changelog-file append-changelog-file
+                    :changelog-file append-file
                     :dry-run (boolean dry-run)
                     :description description}))))
 
@@ -200,11 +205,7 @@ Environment Variables:
                     :content (when (and (not output-file) (not dry-run)) fixed-content)}))))
 
 (defn -main [& _args]
-  (let [options (smith/config usage)
-        options (-> options
-                    (update :llm-endpoint #(or % (System/getenv "JSON_PATCHER_LLM_ENDPOINT")))
-                    (update :llm-api-key #(or % (System/getenv "JSON_PATCHER_LLM_API_KEY")))
-                    (update :llm-model #(or % (System/getenv "JSON_PATCHER_LLM_MODEL") "gpt-4.1")))]
+  (let [options (smith/config usage :name "json-patcher")]
     (try
       (cond
         (:help options)

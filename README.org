@@ -18,6 +18,18 @@ manage and track changes between different JSON files.
 - Append generated descriptions to a changelog
 - Emit JSON output for automation with =--json=
 
+* LLM Compatibility
+
+The =describe= command currently expects an *OpenAI-compatible Chat
+Completions API*.
+
+- Expected request shape: ={"model": "...", "messages": [...]}=
+- Expected response shape: =choices[0].message.content=
+
+This works with OpenAI and providers/proxies exposing an
+OpenAI-compatible Chat Completions endpoint. Anthropic's native
+Messages API is not directly supported.
+
 * Installation
 
 #+begin_src bash
@@ -28,16 +40,21 @@ bbin install io.github.200ok-ch/json-patcher
 
 Examples
 
-#+BEGIN_SRC bash
+#+begin_src shell
 json-patcher diff old.json new.json --out changes.patch
-json-patcher describe changes.patch --append-changelog CHANGELOG.md
+json-patcher describe changes.patch --append CHANGELOG.md
 json-patcher apply old.json fix.patch --out old-fix.json
 json-patcher diff old.json new.json --json
-#+END_SRC
+#+end_src
 
 * Requirements
 
 - Babashka
 - jsondiff/jsonpatch
 - OpenAI API Key (optional)
+
+* Examples
+
+#+begin_src shell
 ./json_patcher.bb diff li-20260302T092642Z-v1.json li-20260302T092703Z-v2.json --out patch-v1-v2.json --json
+#+end_src
