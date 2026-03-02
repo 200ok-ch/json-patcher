@@ -46,6 +46,29 @@ Environment Variables:
 (defn output-json [data]
   (println (json/write-str data)))
 
+(defn mask-secret [value]
+  (if (and value (not (str/blank? value)))
+    "***"
+    "<unset>"))
+
+(defn show-value [value]
+  (if (and value (not (str/blank? value)))
+    value
+    "<unset>"))
+
+(defn log-env [verbose]
+  (when verbose
+    (log true "Environment:")
+    (log true (str "  JSON_PATCHER_LLM_ENDPOINT=" (show-value (System/getenv "JSON_PATCHER_LLM_ENDPOINT"))))
+    (log true (str "  JSON_PATCHER_LLM_API_KEY=" (mask-secret (System/getenv "JSON_PATCHER_LLM_API_KEY"))))
+    (log true (str "  JSON_PATCHER_LLM_MODEL=" (show-value (System/getenv "JSON_PATCHER_LLM_MODEL"))))))
+
+(defn log-block [verbose title lines]
+  (when verbose
+    (log true (str title ":"))
+    (doseq [line lines]
+      (log true (str "  " line)))))
+
 (defn now-human-utc []
   (let [formatter (java.time.format.DateTimeFormatter/ofPattern
                    "dd MMM uuuu, HH:mm 'UTC'"
@@ -102,6 +125,11 @@ Environment Variables:
                     patch-content)
         payload {:model llm-model
                  :messages [{:role "user" :content prompt}]}
+        _ (log-block verbose
+                     "Execution block"
+                     [(str "POST " llm-endpoint)
+                      (str "model=" llm-model)
+                      "response path: choices[0].message.content"])
         response (http/post llm-endpoint
                             {:headers {"Authorization" (str "Bearer " llm-api-key)
                                        "Content-Type" "application/json"}
@@ -141,6 +169,11 @@ Environment Variables:
         from-obj (ensure-file-exists from-file "Source file")
         to-obj (ensure-file-exists to-file "Target file")
         cmd (str "jsondiff " (.getPath from-obj) " " (.getPath to-obj))
+        _ (log-block verbose
+                     "Execution block"
+                     [cmd
+                      (str "write patch: " (or out "stdout"))
+                      (str "output mode: " (if json "json" "text"))])
         result (run-command cmd dry-run verbose #{0 1})
         patch-content (:out result)]
     (when (and out (not dry-run))
@@ -165,6 +198,17 @@ Environment Variables:
             (throw (ex-info "--out and --append are mutually exclusive"
                             {:out out :append append-file})))
         patch-content (slurp patch-file)
+        _ (log-block verbose
+                     "Execution block"
+                     [(str "read patch: " patch-file)
+                      (if (:llm-endpoint options)
+                        (str "describe via LLM endpoint: " (:llm-endpoint options))
+                        "describe locally (no LLM endpoint)")
+                      (cond
+                        append-file (str "append changelog: " append-file)
+                        out (str "write description: " out)
+                        :else "write description: stdout")
+                      (str "output mode: " (if json "json" "text"))])
         description (render-description options patch-content)]
     (cond
       append-file (append append-file patch-file description dry-run verbose)
@@ -188,6 +232,11 @@ Environment Variables:
         _ (ensure-file-exists patch-file "Patch file")
         output-file out
         cmd (str "jsonpatch --indent 2 " (.getPath base-obj) " " patch-file)
+        _ (log-block verbose
+                     "Execution block"
+                     [cmd
+                      (str "write output: " (or output-file "stdout"))
+                      (str "output mode: " (if json "json" "text"))])
         result (run-command cmd dry-run verbose #{0})
         fixed-content (:out result)]
     (when (and output-file (not dry-run))
@@ -207,6 +256,7 @@ Environment Variables:
 (defn -main [& _args]
   (let [options (smith/config usage :name "json-patcher")]
     (try
+      (log-env (:verbose options))
       (cond
         (:help options)
         (println usage)
