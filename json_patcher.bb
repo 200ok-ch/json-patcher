@@ -96,8 +96,9 @@ Environment Variables:
 
 (defn describe-with-llm
   [{:keys [llm-endpoint llm-api-key llm-model verbose]} patch-content]
-  (let [prompt (str "Convert this JSON patch to concise, human-readable release notes. "
-                    "Focus on what changed, added, or removed."
+  (let [prompt (str "Convert this JSON patch to concise, human-readable markdown content describing what changed. "
+                    "Output only the markdown content body. "
+                    "Do not add a title, preface, postscript, or suggestions for additional work. "
                     "Use markdown bullet points where helpful.\n\n"
                     patch-content)
         payload {:model llm-model
@@ -121,13 +122,16 @@ Environment Variables:
       (describe-with-llm options patch-content))
     (local-description patch-content)))
 
+(defn markdown-entry [source-file body]
+  (str "## " (now-human-utc) "\n\n"
+       "Source: `" source-file "`\n\n"
+       body "\n"))
+
 (defn append [changelog-file source-file text dry-run verbose]
   (let [existing-content (if (.exists (io/file changelog-file))
                            (slurp changelog-file)
                            "# Changelog\n")
-        entry (str "\n## " (now-human-utc) "\n\n"
-                   "Source: `" source-file "`\n\n"
-                   text "\n")
+        entry (str "\n" (markdown-entry source-file text))
         new-content (str (str/trimr existing-content) "\n" entry)]
     (if dry-run
       (log verbose "[DRY-RUN] Would append to changelog:" changelog-file)
@@ -165,14 +169,15 @@ Environment Variables:
             (throw (ex-info "--out and --append are mutually exclusive"
                             {:out out :append append-file})))
         patch-content (slurp patch-file)
-        description (render-description options patch-content)]
+        description (render-description options patch-content)
+        markdown (markdown-entry patch-file description)]
     (cond
       append-file (append append-file patch-file description dry-run verbose)
       out (when-not dry-run
-            (spit out description)
+            (spit out markdown)
             (log verbose "Wrote description:" out))
       :else (when-not json
-              (println description)))
+              (println markdown)))
     (when json
       (output-json {:ok true
                     :command "describe"
@@ -180,7 +185,8 @@ Environment Variables:
                     :output-file out
                     :changelog-file append-file
                     :dry-run (boolean dry-run)
-                    :description description}))))
+                    :description description
+                    :markdown markdown}))))
 
 (defn handle-apply [options]
   (let [{:keys [base-file patch-file out json dry-run verbose]} options
