@@ -25,6 +25,7 @@ Options:
   --llm-endpoint <url>                 OpenAI-compatible Chat Completions endpoint
   --llm-api-key <key>                  API key for LLM service
   --llm-model <model>                  Model for LLM service [default: gpt-4.1]
+  --llm-prompt <prompt>                Additional prompt for LLM service
   --dry-run                            Show what would be done without executing
   --verbose                            Enable verbose output
   --json                               Output command result as JSON
@@ -95,11 +96,13 @@ Environment Variables:
       "Patch loaded, but could not parse JSON patch operations.")))
 
 (defn describe-with-llm
-  [{:keys [llm-endpoint llm-api-key llm-model verbose]} patch-content]
-  (let [prompt (str "Convert this JSON patch to concise, human-readable markdown content describing what changed. "
+  [{:keys [llm-endpoint llm-api-key llm-model llm-prompt verbose]} patch-content]
+  (let [prompt (str "Convert this JSON patch (rfc6902) to concise, human-readable markdown content describing what changed. "
                     "Output only the markdown content body. "
                     "Do not add a title, preface, postscript, or suggestions for additional work. "
-                    "Use markdown bullet points where helpful.\n\n"
+                    "Use markdown bullet points where helpful.\n"
+                    llm-prompt
+                    "\n\n"
                     patch-content)
         payload {:model llm-model
                  :messages [{:role "user" :content prompt}]}
